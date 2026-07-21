@@ -1,27 +1,29 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace DispatchSystem.Api.Tests;
-
-public class HealthCheckTests : IClassFixture<WebApplicationFactory<Program>>
+namespace DispatchSystem.Api.Tests
 {
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public HealthCheckTests(WebApplicationFactory<Program> factory)
+    public class HealthCheckTests : IClassFixture<WebApplicationFactory<Program>>
     {
-        _factory = factory;
-    }
+        private readonly WebApplicationFactory<Program> _factory;
 
-    [Fact]
-    public async Task HealthEndpoint_ReturnsHealthy()
-    {
-        var client = _factory.CreateClient();
+        public HealthCheckTests(WebApplicationFactory<Program> factory)
+        {
+            _factory = factory;
+        }
 
-        var res = await client.GetAsync("/health");
+        [Fact]
+        public async Task HealthEndpoint_ReturnsHealthy()
+        {
+            var client = _factory.CreateClient();
 
-        res.EnsureSuccessStatusCode();
+            var res = await client.GetAsync("/health");
 
-        var body = await res.Content.ReadAsStringAsync();
+            res.EnsureSuccessStatusCode();
 
-        Assert.Equal("Healthy", body);
+            var body = await res.Content.ReadAsStringAsync();
+
+            Assert.Equal("Healthy", body);
+        }
     }
 }
+
