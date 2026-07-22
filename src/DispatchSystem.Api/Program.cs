@@ -1,4 +1,6 @@
 using DispatchSystem.Api;
+using DispatchSystem.Api.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
+builder.Services.AddDbContext<DispatchDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DispatchDB"))
+);
 
 var app = builder.Build();
 
@@ -15,7 +20,8 @@ app.MapControllers();
 
 app.MapHealthChecks("/health");
 
-app.MapGet("/about", (IOptions<AppOptions> options) => new {
+app.MapGet("/about", (IOptions<AppOptions> options) => new
+{
     options.Value.Name,
     options.Value.Version,
 });

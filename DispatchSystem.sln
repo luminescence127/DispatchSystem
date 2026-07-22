@@ -9,6 +9,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DispatchSystem.Api", "src\D
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DispatchSystem.Api.Tests", "tests\DispatchSystem.Api.Tests\DispatchSystem.Api.Tests.csproj", "{42072C29-B5E9-4BFA-B9E0-0C472FF8921D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "infra", "infra", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		.env = .env
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,5 +56,8 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{1106F996-5ED2-460D-B20A-8939D9C81086} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{42072C29-B5E9-4BFA-B9E0-0C472FF8921D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C500E4F2-40CA-4B38-AD9A-208BF578F47A}
 	EndGlobalSection
 EndGlobal

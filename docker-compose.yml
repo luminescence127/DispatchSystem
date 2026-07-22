@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: dispatch-pg
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dispatchsystem
+    ports:
+      - "5433:5432"
+    volumes:
+      - dispatch-pg-data:/var/lib/postgresql/data
+
+volumes:
+  dispatch-pg-data:
