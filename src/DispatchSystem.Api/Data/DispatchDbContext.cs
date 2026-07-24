@@ -3,12 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DispatchSystem.Api.Data
 {
-    public class DispatchDbContext : DbContext
+    public class DispatchDbContext(DbContextOptions<DispatchDbContext> options) : DbContext(options)
     {
-        public DispatchDbContext(DbContextOptions<DispatchDbContext> options) : base(options)
-        {
-        }
-
         public DbSet<Order> Orders => Set<Order>();
         public DbSet<Rider> Riders => Set<Rider>();
 
