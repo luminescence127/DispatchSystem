@@ -2,6 +2,7 @@ using DispatchSystem.Api.Data;
 using DispatchSystem.Api.Dtos;
 using DispatchSystem.Api.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace DispatchSystem.Api.Controllers
 {
@@ -18,7 +19,7 @@ namespace DispatchSystem.Api.Controllers
                 CustomerName = request.CustomerName,
                 PickupAddress = request.PickupAddress,
                 DropoffAddress = request.DropoffAddress,
-                Status=OrderStatus.Created,
+                Status = OrderStatus.Created,
                 CreatedAt = DateTime.UtcNow,
             };
 
@@ -26,6 +27,72 @@ namespace DispatchSystem.Api.Controllers
             await db.SaveChangesAsync();
 
             return Created($"/api/orders/{order.Id}", order);
+        }
+
+        [HttpPost("{id:int}/assign")]
+        public async Task<ActionResult> AssignOrder(int id)
+        {
+            var order = await db.Orders.FindAsync(id);
+
+            //訂單是否存在
+            if (order is null) return NotFound();
+
+            //訂單狀態是否為新建
+            if (order.Status != OrderStatus.Created)
+            {
+                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Created} 的訂單可以進行指派。");
+            }
+
+            //找線上任一外送員
+            var rider = await db.Riders
+                .Where(r => r.IsAvailable)
+                .FirstOrDefaultAsync();
+
+            //是否有外送員
+            if (rider is null) return Conflict($"目前沒有可接單的外送員。");
+
+            order.RiderId = rider.Id;
+            order.Status = OrderStatus.Assigned;
+
+            await db.SaveChangesAsync();
+
+            return Ok(order);
+        }
+
+        [HttpPost("{id:int}/accept")]
+        public async Task<ActionResult> AcceptOrder(int id)
+        {
+            var order = await db.Orders.FindAsync(id);
+
+            if (order is null) return NotFound();
+
+            if (order.Status != OrderStatus.Assigned)
+            {
+                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Assigned} 的訂單可以進行接受。");
+            }
+
+            order.Status = OrderStatus.Accepted;
+            await db.SaveChangesAsync();
+
+            return Ok(order);
+        }
+
+        [HttpPost("{id:int}/complete")]
+        public async Task<ActionResult> CompleteOrder(int id)
+        {
+            var order = await db.Orders.FindAsync(id);
+
+            if (order is null) return NotFound();
+
+            if (order.Status != OrderStatus.Accepted)
+            {
+                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Accepted} 的訂單可以進行完成。");
+            }
+
+            order.Status = OrderStatus.Completed;
+            await db.SaveChangesAsync();
+
+            return Ok(order);
         }
     }
 }
