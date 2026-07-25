@@ -40,7 +40,11 @@ namespace DispatchSystem.Api.Controllers
             //訂單狀態是否為新建
             if (order.Status != OrderStatus.Created)
             {
-                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Created} 的訂單可以進行指派。");
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Created} 的訂單可以進行指派。"
+                );
             }
 
             //找線上任一外送員
@@ -49,7 +53,14 @@ namespace DispatchSystem.Api.Controllers
                 .FirstOrDefaultAsync();
 
             //是否有外送員
-            if (rider is null) return Conflict($"目前沒有可接單的外送員。");
+            if (rider is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: "目前沒有可接單的外送員。"
+                );
+            }
 
             order.RiderId = rider.Id;
             order.Status = OrderStatus.Assigned;
@@ -68,7 +79,11 @@ namespace DispatchSystem.Api.Controllers
 
             if (order.Status != OrderStatus.Assigned)
             {
-                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Assigned} 的訂單可以進行接受。");
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Assigned} 的訂單可以進行接受。"
+                );
             }
 
             order.Status = OrderStatus.Accepted;
@@ -86,7 +101,11 @@ namespace DispatchSystem.Api.Controllers
 
             if (order.Status != OrderStatus.Accepted)
             {
-                return Conflict($"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Accepted} 的訂單可以進行完成。");
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Accepted} 的訂單可以進行完成。"
+                );
             }
 
             order.Status = OrderStatus.Completed;

@@ -17,6 +17,7 @@ builder.Services.AddControllers()
     );
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
 builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
 builder.Services.AddDbContext<DispatchDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DispatchDB"))
@@ -29,6 +30,12 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
+else
+{
+    app.UseExceptionHandler();
+}
+
+app.UseStatusCodePages();
 
 app.MapControllers();
 
