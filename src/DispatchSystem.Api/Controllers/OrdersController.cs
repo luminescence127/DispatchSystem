@@ -11,7 +11,23 @@ namespace DispatchSystem.Api.Controllers
     [Route("api/orders")]
     public class OrdersController(DispatchDbContext db) : ControllerBase
     {
+        [HttpGet("{id:int}")]
+        [ProducesResponseType<Order>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<Order>> GetOrder(int id)
+        {
+            var order = await db.Orders
+                .AsNoTracking()
+                .SingleOrDefaultAsync(o => o.Id == id);
+
+            if (order is null) return NotFound();
+
+            return Ok(order);
+        }
+
         [HttpPost]
+        [ProducesResponseType<Order>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<Order>> CreateOrder(CreateOrderRequest request)
         {
             var order = new Order
@@ -30,6 +46,9 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/assign")]
+        [ProducesResponseType<Order>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
         public async Task<ActionResult<Order>> AssignOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);
@@ -71,6 +90,9 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/accept")]
+        [ProducesResponseType<Order>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
         public async Task<ActionResult<Order>> AcceptOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);
@@ -93,6 +115,9 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/complete")]
+        [ProducesResponseType<Order>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
         public async Task<ActionResult<Order>> CompleteOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);

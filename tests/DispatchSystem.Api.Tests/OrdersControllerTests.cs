@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DispatchSystem.Api.Tests
 {
@@ -13,6 +15,37 @@ namespace DispatchSystem.Api.Tests
     public class OrdersControllerTests(DispatchApiFactory factory) : IClassFixture<DispatchApiFactory>
     {
         // [Fact] = 「這是一個測試」。沒有它，xUnit 根本不會執行這個方法。
+        [Fact]
+        public async Task GetOrderById_Returns200()
+        {
+            var client = factory.CreateClient();
+
+            // 準備：自己建一張單，拿回它的 id
+            var id = await CreateOrderAsync(client, "測試查詢訂單");
+
+            // 動作：用 GET 打查詢端點
+            var res = await client.GetAsync($"/api/orders/{id}");
+
+            // 檢查 1：狀態碼
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+            // 檢查 2：拆信封，把 body 讀成 Order
+            var order = await res.Content.ReadFromJsonAsync<Order>(JsonOptions);
+
+            Assert.NotNull(order);
+            Assert.Equal(id, order.Id);
+            Assert.Equal("測試查詢訂單", order.CustomerName);
+            Assert.Equal(OrderStatus.Created, order.Status);
+        }
+        [Fact]
+        public async Task GetOrderById_WhenNotExists_Returns404()
+        {
+            var client = factory.CreateClient();
+
+            var res = await client.GetAsync("/api/orders/999999");
+
+            Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+        }
         [Fact]
         // 回傳 Task 就好，不要 Task<ActionResult>。
         // ActionResult 是「伺服器那一邊」controller 在用的東西；
@@ -222,10 +255,6 @@ namespace DispatchSystem.Api.Tests
                 .AsNoTracking()
                 .SingleAsync(o => o.Id == id);
         }
-        private sealed class CreatedOrder
-        {
-            public int Id { get; set; }
-        }
         private async Task SetRiderAvailabilityAsync(int riderId, bool isAvailable)
         {
             using var scope = factory.Services.CreateScope();
@@ -236,5 +265,14 @@ namespace DispatchSystem.Api.Tests
 
             await db.SaveChangesAsync();
         }
+        private sealed class CreatedOrder
+        {
+            public int Id { get; set; }
+        }
+        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+        {
+            Converters = { new JsonStringEnumConverter() },
+        };
+
     }
 }
