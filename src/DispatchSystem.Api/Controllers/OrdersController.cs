@@ -12,7 +12,7 @@ namespace DispatchSystem.Api.Controllers
     public class OrdersController(DispatchDbContext db) : ControllerBase
     {
         [HttpPost]
-        public async Task<ActionResult> CreateOrder(CreateOrderRequest request)
+        public async Task<ActionResult<Order>> CreateOrder(CreateOrderRequest request)
         {
             var order = new Order
             {
@@ -30,7 +30,7 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/assign")]
-        public async Task<ActionResult> AssignOrder(int id)
+        public async Task<ActionResult<Order>> AssignOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);
 
@@ -71,7 +71,7 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/accept")]
-        public async Task<ActionResult> AcceptOrder(int id)
+        public async Task<ActionResult<Order>> AcceptOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);
 
@@ -93,7 +93,7 @@ namespace DispatchSystem.Api.Controllers
         }
 
         [HttpPost("{id:int}/complete")]
-        public async Task<ActionResult> CompleteOrder(int id)
+        public async Task<ActionResult<Order>> CompleteOrder(int id)
         {
             var order = await db.Orders.FindAsync(id);
 
@@ -104,7 +104,7 @@ namespace DispatchSystem.Api.Controllers
                 return Problem(
                     statusCode: StatusCodes.Status409Conflict,
                     title: "訂單狀態無法更新",
-                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Accepted} 的訂單可以進行完成。"
+                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為{OrderStatus.Accepted} 的訂單可以進行完成。"
                 );
             }
 
