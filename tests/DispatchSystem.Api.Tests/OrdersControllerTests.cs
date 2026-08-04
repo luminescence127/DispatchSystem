@@ -1,4 +1,5 @@
 using DispatchSystem.Api.Data;
+using DispatchSystem.Api.Dtos;
 using DispatchSystem.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,9 +13,71 @@ namespace DispatchSystem.Api.Tests
     // IClassFixture<DispatchApiFactory>：跟 xUnit 說「這個類別的測試要用那台測試伺服器」。
     // xUnit 會自己建一個 DispatchApiFactory（並呼叫它的 InitializeAsync 起容器），
     // 然後從主建構子的 factory 參數塞給你。
-    public class OrdersControllerTests(DispatchApiFactory factory) : IClassFixture<DispatchApiFactory>
+    public class OrdersControllerTests(DispatchApiFactory factory) : IClassFixture<DispatchApiFactory>, IAsyncLifetime
     {
+        public async Task InitializeAsync()
+        {
+            await DeleteAllOrdersAsync();
+        }
+        public Task DisposeAsync() => Task.CompletedTask;
         // [Fact] = 「這是一個測試」。沒有它，xUnit 根本不會執行這個方法。
+        [Fact]
+        public async Task GetOrders_FilterByStatus_ReturnsOnlyThatStatus()
+        {
+            var client = factory.CreateClient();
+
+            var createdId = await CreateOrderAsync(client, "篩選-未指派");
+            var assignedId = await CreateOrderAsync(client, "篩選-已指派");
+
+            var assignRes = await client.PostAsync($"/api/orders/{assignedId}/assign", null);
+            assignRes.EnsureSuccessStatusCode();
+
+            var body = await GetOrderListAsync(client, "/api/orders?status=Created");
+
+            Assert.Equal(1, body.TotalCount);
+
+            var item = Assert.Single(body.Items);
+
+            Assert.Equal(createdId, item.Id);
+            Assert.Equal(OrderStatus.Created, item.Status);
+        }
+        [Fact]
+        public async Task GetOrders_SplitsResultsIntoPages_NewestFirst()
+        {
+            var client = factory.CreateClient();
+
+            var firstCreatedId = await CreateOrderAsync(client, "分頁-1");
+            var secondCreatedId = await CreateOrderAsync(client, "分頁-2");
+            var thirdCreatedId = await CreateOrderAsync(client, "分頁-3");
+
+            var page1 = await GetOrderListAsync(client, "/api/orders?page=1&pageSize=2");
+            var page2 = await GetOrderListAsync(client, "/api/orders?page=2&pageSize=2");
+
+            Assert.Equal(3, page1.TotalCount);
+            Assert.Equal(new[] { thirdCreatedId, secondCreatedId }, page1.Items.Select(item => item.Id));
+            Assert.Equal(new[] { firstCreatedId }, page2.Items.Select(item => item.Id));
+        }
+        [Fact]
+        public async Task GetOrders_WhenPageSizeIsTooBig_ReturnsAtMost100Orders()
+        {
+            var client = factory.CreateClient();
+            await InsertOrdersDirectlyAsync(101);
+
+            var body = await GetOrderListAsync(client, "/api/orders?pageSize=1000");
+
+            Assert.Equal(101, body.TotalCount);
+            Assert.Equal(100, body.PageSize);
+            Assert.Equal(100, body.Items.Count);
+        }
+        [Fact]
+        public async Task GetOrders_WhenStatusIsNotAKnownValue_Returns400()
+        {
+            var client = factory.CreateClient();
+
+            var res = await client.GetAsync("/api/orders?status=Foo");
+
+            Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        }
         [Fact]
         public async Task GetOrderById_Returns200()
         {
@@ -229,6 +292,14 @@ namespace DispatchSystem.Api.Tests
                 await SetRiderAvailabilityAsync(1, true);
             }
         }
+        private sealed class CreatedOrder
+        {
+            public int Id { get; set; }
+        }
+        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+        {
+            Converters = { new JsonStringEnumConverter() },
+        };
         private static async Task<int> CreateOrderAsync(HttpClient client, string customerName)
         {
             var res = await client.PostAsJsonAsync("/api/orders", new
@@ -265,14 +336,43 @@ namespace DispatchSystem.Api.Tests
 
             await db.SaveChangesAsync();
         }
-        private sealed class CreatedOrder
+        private static async Task<OrderListResponse> GetOrderListAsync(HttpClient client, string url)
         {
-            public int Id { get; set; }
-        }
-        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-        {
-            Converters = { new JsonStringEnumConverter() },
-        };
+            var res = await client.GetAsync(url);
 
+            res.EnsureSuccessStatusCode();
+
+            var body = await res.Content.ReadFromJsonAsync<OrderListResponse>(JsonOptions);
+
+            Assert.NotNull(body);
+
+            return body;
+        }
+        private async Task DeleteAllOrdersAsync()
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DispatchDbContext>();
+
+            await db.Orders.ExecuteDeleteAsync();
+        }
+        private async Task InsertOrdersDirectlyAsync(int count)
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DispatchDbContext>();
+
+            for (var i = 0; i < count; i++)
+            {
+                db.Orders.Add(new Order
+                {
+                    CustomerName = $"批次-{i}",
+                    PickupAddress = "台北市中正區重慶南路一段122號",
+                    DropoffAddress = "台北市信義區市府路1號",
+                    Status = OrderStatus.Created,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 }

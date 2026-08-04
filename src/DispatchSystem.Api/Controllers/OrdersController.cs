@@ -11,6 +11,46 @@ namespace DispatchSystem.Api.Controllers
     [Route("api/orders")]
     public class OrdersController(DispatchDbContext db) : ControllerBase
     {
+        [HttpGet]
+        [ProducesResponseType<OrderListResponse>(StatusCodes.Status200OK)]
+        public async Task<ActionResult<OrderListResponse>> GetOrders([FromQuery] OrderStatus? status,[FromQuery] int page = 1,[FromQuery] int pageSize = 20)
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            IQueryable<Order> query = db.Orders;
+
+            if (status is not null)
+            {
+                query = query.Where(o => o.Status == status.Value);
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderByDescending(o => o.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(o => new OrderListItem
+                {
+                    Id = o.Id,
+                    CustomerName = o.CustomerName,
+                    Status = o.Status,
+                    RiderId = o.RiderId,
+                    CreatedAt = o.CreatedAt,
+                })
+                .ToListAsync();
+
+            return Ok(new OrderListResponse
+            {
+                Items = items,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+            });
+        }
+
         [HttpGet("{id:int}")]
         [ProducesResponseType<Order>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
