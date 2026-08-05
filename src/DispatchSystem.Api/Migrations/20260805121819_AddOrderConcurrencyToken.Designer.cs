@@ -3,6 +3,7 @@ using System;
 using DispatchSystem.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DispatchSystem.Api.Migrations
 {
     [DbContext(typeof(DispatchDbContext))]
-    partial class DispatchDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805121819_AddOrderConcurrencyToken")]
+    partial class AddOrderConcurrencyToken
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -62,7 +65,7 @@ namespace DispatchSystem.Api.Migrations
 
                     b.HasIndex("RiderId");
 
-                    b.ToTable("Orders", (string)null);
+                    b.ToTable("Orders");
                 });
 
             modelBuilder.Entity("DispatchSystem.Api.Models.Rider", b =>
@@ -82,7 +85,7 @@ namespace DispatchSystem.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Riders", (string)null);
+                    b.ToTable("Riders");
 
                     b.HasData(
                         new
@@ -96,54 +99,6 @@ namespace DispatchSystem.Api.Migrations
                             Id = 2,
                             IsAvailable = false,
                             Name = "劉備"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            IsAvailable = false,
-                            Name = "關羽"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            IsAvailable = false,
-                            Name = "趙雲"
-                        },
-                        new
-                        {
-                            Id = 5,
-                            IsAvailable = false,
-                            Name = "馬超"
-                        },
-                        new
-                        {
-                            Id = 6,
-                            IsAvailable = false,
-                            Name = "黃忠"
-                        },
-                        new
-                        {
-                            Id = 7,
-                            IsAvailable = false,
-                            Name = "曹操"
-                        },
-                        new
-                        {
-                            Id = 8,
-                            IsAvailable = false,
-                            Name = "孫權"
-                        },
-                        new
-                        {
-                            Id = 9,
-                            IsAvailable = false,
-                            Name = "周瑜"
-                        },
-                        new
-                        {
-                            Id = 10,
-                            IsAvailable = false,
-                            Name = "呂布"
                         });
                 });
 

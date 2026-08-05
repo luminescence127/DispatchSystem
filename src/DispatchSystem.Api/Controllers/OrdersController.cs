@@ -129,6 +129,70 @@ namespace DispatchSystem.Api.Controllers
             return Ok(order);
         }
 
+        [HttpPost("{id:int}/claim")]
+        [ProducesResponseType<Order>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<Order>> ClaimOrder(int id, ClaimOrderRequest request)
+        {
+            var order = await db.Orders.FindAsync(id);
+
+            //訂單是否存在
+            if (order is null) return NotFound();
+
+            //訂單狀態是否為新建
+            if (order.Status != OrderStatus.Created)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: $"訂單目前狀態為 {order.Status}，只有狀態為 {OrderStatus.Created} 的訂單可以搶單。"
+                );
+            }
+
+            //外送員是否存在
+            var rider = await db.Riders.SingleOrDefaultAsync(r => r.Id == request.RiderId);
+
+            if (rider is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "找不到外送員",
+                    detail: $"找不到編號 {request.RiderId} 的外送員。"
+                );
+            }
+
+            //外送員是否可以接單
+            if (!rider.IsAvailable)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "外送員無法接單",
+                    detail: $"編號 {request.RiderId} 的外送員目前不是可接單狀態。"
+                );
+            }
+
+            order.RiderId = request.RiderId;
+            order.Status = OrderStatus.Accepted;
+
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                //讀取到寫入之間，這張單已經被別人改掉了
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "訂單狀態無法更新",
+                    detail: "這張訂單已經被其他外送員搶走。"
+                );
+            }
+
+            return Ok(order);
+        }
+
         [HttpPost("{id:int}/accept")]
         [ProducesResponseType<Order>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

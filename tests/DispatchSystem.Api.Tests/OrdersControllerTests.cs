@@ -292,6 +292,175 @@ namespace DispatchSystem.Api.Tests
                 await SetRiderAvailabilityAsync(1, true);
             }
         }
+        [Fact]
+        public async Task ClaimOrder_SetsStatusAcceptedAndRecordsTheRider()
+        {
+            var client = factory.CreateClient();
+            var id = await CreateOrderAsync(client, "測試搶單");
+
+            await SetRidersAvailabilityAsync(new[] { 3 }, true);
+
+            try
+            {
+                var res = await client.PostAsJsonAsync($"/api/orders/{id}/claim", new { riderId = 3 });
+
+                Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+                var order = await GetOrderFromDbAsync(id);
+
+                Assert.Equal(OrderStatus.Accepted, order.Status);
+                Assert.Equal(3, order.RiderId);
+            }
+            finally
+            {
+                await SetRidersAvailabilityAsync(new[] { 3 }, false);
+            }
+        }
+        [Fact]
+        public async Task ClaimOrder_WhenRiderIsNotAvailable_Returns409()
+        {
+            var client = factory.CreateClient();
+            var id = await CreateOrderAsync(client, "測試離線外送員搶單");
+
+            //3 號在種子資料裡就是不可接單，這裡不需要動它
+            var res = await client.PostAsJsonAsync($"/api/orders/{id}/claim", new { riderId = 3 });
+
+            Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+
+            var order = await GetOrderFromDbAsync(id);
+
+            Assert.Equal(OrderStatus.Created, order.Status);
+            Assert.Null(order.RiderId);
+        }
+        [Fact]
+        public async Task ClaimOrder_WhenTwoRidersReadTheSameOrder_TheSecondSaveIsRejected()
+        {
+            var client = factory.CreateClient();
+            var id = await CreateOrderAsync(client, "測試樂觀鎖擋得住");//兩個人都看到空位、同時伸手，慢的那隻手被打掉
+
+            using var scopeA = factory.Services.CreateScope();
+            using var scopeB = factory.Services.CreateScope();
+
+            var dbA = scopeA.ServiceProvider.GetRequiredService<DispatchDbContext>();
+            var dbB = scopeB.ServiceProvider.GetRequiredService<DispatchDbContext>();
+
+            var orderA = await dbA.Orders.SingleAsync(o => o.Id == id);
+            var orderB = await dbB.Orders.SingleAsync(o => o.Id == id);
+
+            orderA.RiderId = 3;
+            orderA.Status = OrderStatus.Accepted;
+            await dbA.SaveChangesAsync();
+
+            orderB.RiderId = 4;
+            orderB.Status = OrderStatus.Accepted;
+
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync());
+
+            var order = await GetOrderFromDbAsync(id);
+
+            Assert.Equal(3, order.RiderId);
+        }
+        [Fact]
+        public async Task ClaimOrder_WhenManyRidersClaimAtOnce_OnlyOneWins()
+        {
+            var client = factory.CreateClient();
+            var id = await CreateOrderAsync(client, "測試併發搶單");
+
+            var riderIds = new[] { 3, 4, 5, 6, 7, 8, 9, 10 };
+
+            await SetRidersAvailabilityAsync(riderIds, true);
+
+            try
+            {
+                // ┌─ 這一段在做什麼 ────────────────────────────────────────┐
+                // │ 讓八個搶單請求「盡量同時」送出去。                       │
+                // │ 比喻：gate 是發令槍，八個外送員是選手。                  │
+                // └────────────────────────────────────────────────────────┘
+
+                // 發令槍。它身上的 gate.Task 代表「槍響」這件事，
+                // 而且它永遠不會自己響——只有 SetResult() 才會讓它響。
+                var gate = new TaskCompletionSource();
+
+                var calls = riderIds
+                    // Select = 把陣列裡每個數字換成別的東西。
+                    // 這裡換成「一個正在進行中的工作」（Task），
+                    // 就像叫八個人去跑腿，手上拿到的是八張號碼牌、不是八個便當。
+                    .Select(async riderId =>
+                    {
+                        // 每個選手的第一件事：蹲在起跑線上聽槍聲。
+                        // 槍還沒響，所以跑到這一行就停住，一個請求都還沒送出去。
+                        await gate.Task;
+
+                        // 槍響之後才會執行到這裡：送出搶單請求。
+                        return await client.PostAsJsonAsync($"/api/orders/{id}/claim", new { riderId });
+                    })
+                    // Select 有個規矩：沒人跟它要結果，它就不動（延遲執行）。
+                    // ToArray() = 我現在就要 —— 這一行才真的讓八個選手上場，
+                    // 然後八個全部蹲在上面那行等槍聲。
+                    .ToArray();
+
+                // 砰。八個同時起跑。
+                gate.SetResult();
+
+                // 等八個都跑完，拿回八個 HTTP 回應。
+                var responses = await Task.WhenAll(calls);
+
+                // Assert.Single 一次做兩件事：斷言「剛好一個」，順便把那一個交出來。
+                //
+                // 條件要直接交給它，不要寫成 Assert.Single(responses.Where(...))。
+                // ── xUnit2031 是什麼 ──
+                // 裝 xUnit 的時候會一起裝一組「程式碼檢查規則」，每次 dotnet build
+                // 都會自動掃測試程式碼，違反就出警告，編號長這樣：xUnit2031。
+                // 這條的標題是 Do not use Where clause with Assert.Single，
+                // 官方理由：Assert.Single 本來就有一個可以直接吃條件的版本，
+                // 用它比較簡潔，也更看得出意圖。
+                // 規則全文：https://xunit.net/xunit.analyzers/rules/xUnit2031
+                var winner = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+                Assert.Equal(7, responses.Count(r => r.StatusCode == HttpStatusCode.Conflict));
+
+                // 拆開贏家那份回應的 body，看 API 說是誰搶到的。
+                var winnerOrder = await winner.Content.ReadFromJsonAsync<Order>(JsonOptions);
+
+                Assert.NotNull(winnerOrder);
+
+                var order = await GetOrderFromDbAsync(id);
+
+                Assert.Equal(OrderStatus.Accepted, order.Status);
+
+                // 關鍵：API 回報的贏家，跟資料庫裡真正寫進去的，必須是同一個人。
+                Assert.Equal(winnerOrder.RiderId, order.RiderId);
+            }
+            finally
+            {
+                await SetRidersAvailabilityAsync(riderIds, false);
+            }
+        }
+        [Fact]
+        public async Task ClaimOrderAlreadyAccepted_Returns409()
+        {
+            var client = factory.CreateClient();
+            var id = await CreateOrderAsync(client, "測試搶已被搶走的單");//來晚了，看板上已經寫著別人的名字
+
+            await SetRidersAvailabilityAsync(new[] { 3, 4 }, true);
+
+            try
+            {
+                var firstRes = await client.PostAsJsonAsync($"/api/orders/{id}/claim", new { riderId = 3 });
+                firstRes.EnsureSuccessStatusCode();
+
+                var secondRes = await client.PostAsJsonAsync($"/api/orders/{id}/claim", new { riderId = 4 });
+
+                Assert.Equal(HttpStatusCode.Conflict, secondRes.StatusCode);
+
+                var order = await GetOrderFromDbAsync(id);
+
+                Assert.Equal(3, order.RiderId);
+            }
+            finally
+            {
+                await SetRidersAvailabilityAsync(new[] { 3, 4 }, false);
+            }
+        }
         private sealed class CreatedOrder
         {
             public int Id { get; set; }
@@ -335,6 +504,15 @@ namespace DispatchSystem.Api.Tests
             rider.IsAvailable = isAvailable;
 
             await db.SaveChangesAsync();
+        }
+        private async Task SetRidersAvailabilityAsync(int[] riderIds, bool isAvailable)
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DispatchDbContext>();
+
+            await db.Riders
+                .Where(r => riderIds.Contains(r.Id))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.IsAvailable, isAvailable));
         }
         private static async Task<OrderListResponse> GetOrderListAsync(HttpClient client, string url)
         {
